@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AetherGrid: Smart Grid Power Flow & Substation Balancer</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0b0f19; color: #f8fafc; margin: 15px; }
+        .container { max-width: 950px; margin: auto; }
+        .controls { background: #151e30; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 15px; border: 1px solid #22314e; align-items: center; }
+        button, select { padding: 8px 14px; border-radius: 6px; border: 1px solid #334155; background: #0b0f19; color: #fff; font-size: 13px; font-weight: bold; cursor: pointer; }
+        button { background: #2563eb; border: none; }
+        button:hover { background: #1d4ed8; }
+        button.secondary { background: #334155; }
+        button.secondary:hover { background: #475569; }
+        #canvas { background: #0f172a; border-radius: 8px; display: block; width: 100%; height: auto; border: 1px solid #22314e; cursor: pointer; }
+        .log-box { background: #151e30; padding: 12px; border-radius: 8px; margin-top: 15px; border: 1px solid #22314e; font-family: monospace; font-size: 12px; height: 110px; overflow-y: auto; }
+        .log-item { color: #fbbf24; margin-bottom: 4px; }
+        .stats { display: flex; gap: 20px; font-size: 13px; color: #38bdf8; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h3>AetherGrid: Smart Grid Power Flow & Substation Balancer</h3>
+        <div class="controls">
+            <button onclick="triggerSurge()">Inject Peak Load Surge</button>
+            <button class="secondary" onclick="resetGrid()">Reset Network Lines</button>
+            <div class="stats">
+                <span>Grid Frequency: <span id="freqText" style="color: #4ade80;">50.00 Hz</span></span>
+                <span>System Stability: <span id="stabilityText" style="color: #38bdf8;">SECURE</span></span>
+            </div>
+        </div>
+
+        <canvas id="canvas" width="900" height="450"></canvas>
+
+        <div class="log-box">
+            <div style="color: #38bdf8; font-weight: bold; margin-bottom: 6px;">Substation Telemetry & SCADA Controller Logs:</div>
+            <div id="logContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Power Nodes (Generators & Substations)
+        const nodes = [
+            {id: 0, name: "Thermal Plant", type: "gen", output: 120, x: 120, y: 120, color: "#f97316"},
+            {id: 1, name: "Solar Farm", type: "gen", output: 80, x: 120, y: 320, color: "#eab308"},
+            {id: 2, name: "Main Hub Substation", type: "sub", load: 0, x: 450, y: 220, color: "#38bdf8"},
+            {id: 3, name: "Urban Zone North", type: "load", load: 90, x: 780, y: 100, color: "#a855f7"},
+            {id: 4, name: "Industrial Zone East", type: "load", load: 110, x: 780, y: 350, color: "#a855f7"}
+        ];
+
+        // Transmission Lines connecting nodes
+        let lines = [
+            {from: 0, to: 2, capacity: 150, flow: 0, active: true},
+            {from: 1, to: 2, capacity: 100, flow: 0, active: true},
+            {from: 2, to: 3, capacity: 120, flow: 0, active: true},
+            {from: 2, to: 4, capacity: 130, flow: 0, active: true},
+            {from: 0, to: 3, capacity: 80, flow: 0, active: true} // Bypass line
+        ];
+
+        let gridFrequency = 50.00;
+        let isStable = true;
+
+        function logMessage(msg) {
+            const logContent = document.getElementById('logContent');
+            const div = document.createElement('div');
+            div.className = 'log-item';
+            div.innerText = `> [${new Date().toLocaleTimeString()}] ${msg}`;
+            logContent.prepend(div);
+            if (logContent.children.length > 20) logContent.lastChild.remove();
+        }
+
+        function triggerSurge() {
+            nodes[3].load += 40;
+            nodes[4].load += 50;
+            logMessage("WARNING: High consumer demand surge injected across urban/industrial zones.");
+        }
+
+        function resetGrid() {
+            lines.forEach(l => l.active = true);
+            nodes[3].load = 90;
+            nodes[4].load = 110;
+            gridFrequency = 50.00;
+            logMessage("SCADA: All transmission lines restored and loads reset to nominal baseline.");
+        }
+
+        // Click to trip/untrip transmission lines
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            lines.forEach(l => {
+                const p1 = nodes[l.from];
+                const p2 = nodes[l.to];
+                // Distance from point to line segment check
+                const dist = distToSegment({x: mouseX, y: mouseY}, {x: p1.x, y: p1.y}, {x: p2.x, y: p2.y});
+                if (dist < 12) {
+                    l.active = !l.active;
+                    logMessage(`SCADA: Transmission line [${p1.name} ↔ ${p2.name}] manually ${l.active ? 'RESTORED' : 'TRIPPED/DAMAGED'}.`);
+                }
+            });
+        });
+
+        function distToSegment(p, a, b) {
+            let l2 = (b.x - a.x)**2 + (b.y - a.y)**2;
+            if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+            let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y)));
+        }
+
+        function simulatePowerFlow() {
+            // Simple load balancing check
+            let totalGen = nodes.filter(n => n.type === 'gen').reduce((sum, n) => sum + n.output, 0);
+            let totalLoad = nodes.filter(n => n.type === 'load').reduce((sum, n) => sum + n.load, 0);
+
+            // Distribute flow across active lines
+            lines.forEach(l => {
+                if (!l.active) {
+                    l.flow = 0;
+                    return;
+                }
+                // Simplified proportional load distribution
+                if (l.from === 0 && l.to === 2) l.flow = Math.min(l.capacity, totalGen * 0.6);
+                if (l.from === 1 && l.to === 2) l.flow = Math.min(l.capacity, totalGen * 0.4);
+                if (l.from === 2 && l.to === 3) l.flow = Math.min(l.capacity, nodes[3].load);
+                if (l.from === 2 && l.to === 4) l.flow = Math.min(l.capacity, nodes[4].load);
+                if (l.from === 0 && l.to === 3) l.flow = l.active ? 30 : 0;
+            });
+
+            // Frequency stability calculation
+            let imbalance = totalGen - totalLoad;
+            gridFrequency = 50.00 + (imbalance * 0.005);
+            gridFrequency = Math.max(47.00, Math.min(52.00, gridFrequency));
+
+            if (gridFrequency < 49.00 || gridFrequency > 51.00) {
+                isStable = false;
+                document.getElementById('stabilityText').innerText = "UNSTABLE (OVERLOAD)";
+                document.getElementById('stabilityText').style.color = "#ef4444";
+            } else {
+                isStable = true;
+                document.getElementById('stabilityText').innerText = "SECURE";
+                document.getElementById('stabilityText').style.color = "#38bdf8";
+            }
+
+            document.getElementById('freqText').innerText = gridFrequency.toFixed(2) + " Hz";
+            document.getElementById('freqText').style.color = isStable ? "#4ade80" : "#ef4444";
+        }
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Transmission Lines
+            lines.forEach(l => {
+                const p1 = nodes[l.from];
+                const p2 = nodes[l.to];
+
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+
+                if (!l.active) {
+                    ctx.strokeStyle = '#ef4444'; // Tripped/Broken Line
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([6, 6]);
+                } else {
+                    ctx.strokeStyle = l.flow > l.capacity * 0.85 ? '#eab308' : '#38bdf8'; // Warning vs Normal
+                    ctx.lineWidth = 4;
+                    ctx.setLineDash([]);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Flow label
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '10px sans-serif';
+                ctx.fillText(`${Math.round(l.flow)}MW`, (p1.x + p2.x)/2, (p1.y + p2.y)/2 - 8);
+            });
+
+            // Draw Nodes
+            nodes.forEach(n => {
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, 24, 0, Math.PI * 2);
+                ctx.fillStyle = n.color;
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '11px bold sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(n.name, n.x, n.y - 32);
+
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '10px sans-serif';
+                let subText = n.type === 'gen' ? `${n.output}MW` : (n.type === 'load' ? `${n.load}MW` : 'HUB');
+                ctx.fillText(subText, n.x, n.y + 4);
+            });
+        }
+
+        function loop() {
+            simulatePowerFlow();
+            drawGrid();
+            requestAnimationFrame(loop);
+        }
+
+        logMessage("AetherGrid SCADA monitoring active. Click any transmission line to trip/break it.");
+        loop();
+    </script>
+</body>
+  </html>
+  
