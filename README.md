@@ -22,5 +22,31 @@
 ## ✨ Key Features
 
 * **⚡ Real-Time Power Flow Calculation:** Proportional load distribution across transmission lines with live capacity tracking and warning indicators.
-* **🎛️ Interactive Line Tripping & Restoration:** Click directly on any transmission line on
-* 
+* **🎛️ Interactive Line Tripping & Restoration:** Click directly on any transmission line on the canvas to manually trip, damage, or restore it and observe dynamic grid routing changes.
+* **📈 Frequency Stability Monitoring:** Computes generation-load imbalances in real time, tracking grid frequency ($50.00\,Hz$ baseline) and switching system status between `SECURE` and `UNSTABLE (OVERLOAD)`.
+* **💥 Peak Load Surge Injection:** Instantly stress-test the grid by injecting sudden consumer demand spikes across urban and industrial zones.
+* **📊 SCADA Telemetry & Logs:** Live timestamped event console logging operator actions, line faults, and stability warnings.
+
+---
+
+## 🛠️ Tech Stack
+
+* **Frontend:** Vanilla HTML5, CSS3
+* **Rendering Engine:** HTML5 2D Canvas API
+* **Simulation Logic:** Vanilla JavaScript (ES6+ Vector Geometry, Proportional Power Flow Algorithms)
+
+---
+
+## 🏗️ Grid Simulation Architecture
+
+The SCADA engine continuously evaluates generation-to-load equilibrium and transmission line constraints:
+
+```mermaid
+graph TD;
+    A[Monitor Total Generation & Consumer Load] --> B[Calculate Supply-Demand Imbalance];
+    B --> C[Compute Grid Frequency Deviation Hz];
+    C --> D{Is Frequency within 49.0 - 51.0 Hz?};
+    D -- Yes --> E[System Status: SECURE];
+    D -- No --> F[System Status: UNSTABLE OVERLOAD];
+    E --> G[Update Proportional Power Flow on Active Lines];
+    F --> G;
